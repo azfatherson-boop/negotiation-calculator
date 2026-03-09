@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Negotiation Calculator — Dale Miller Team</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0c1017;color:#d4dae3;font-family:'DM Sans',system-ui,sans-serif}
+  input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]{-moz-appearance:textfield}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(140,160,185,0.15);border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo}=React;
+const fmt=(n)=>{if(n==null||isNaN(n))return"$0";const a=Math.abs(Math.round(n));const s=a>=1000?"$"+a.toLocaleString("en-US"):"$"+a;return n<0?"("+s+")":s};
+const parse$=(s)=>{const c=s.replace(/[^0-9.]/g,"");return c===""?0:parseFloat(c)};
+const pct=(v,b)=>b?((v/b)*100).toFixed(1)+"%":"";
+const C={bg:"#0c1017",surface:"#131920",surfaceAlt:"#0f151c",border:"rgba(140,160,185,0.08)",text:"#d4dae3",textDim:"#707d8f",textMuted:"#4a5568",blue:"#3b9eff",orange:"#f0943a",green:"#34d399",red:"#ef6461",cyan:"#22d3ee"};
+const mono="'JetBrains Mono',monospace";const sans="'DM Sans',system-ui,sans-serif";
+
+const mkOffer=(label="Offer")=>({label,offerPrice:0,brokerType:"percent",brokerPct:3,brokerFlat:0,concType:"percent",concPct:0,concFlat:0,listCommPct:3,titlePct:1,hoaFee:0,warranty:0,repairs:0,otherCosts:0});
+
+function calcNet(o,lp,mp=0){
+  const p=o.offerPrice||0;
+  const br=o.brokerType==="percent"?p*(o.brokerPct/100):o.brokerFlat;
+  const cn=o.concType==="percent"?p*(o.concPct/100):o.concFlat;
+  const lc=p*(o.listCommPct/100);const ti=p*(o.titlePct/100);
+  const ex=(o.hoaFee||0)+(o.warranty||0)+(o.repairs||0)+(o.otherCosts||0);
+  const tc=br+cn+lc+ti+ex;const net=p-tc;
+  return{price:p,broker:br,conc:cn,listComm:lc,title:ti,extras:ex,totalCosts:tc,net,afterMortgage:net-mp};
+}
+
+function reverseCalcPrice(targetNet,cs){
+  const pp=(cs.brokerType==="percent"?cs.brokerPct:0)+(cs.concType==="percent"?cs.concPct:0)+cs.listCommPct+cs.titlePct;
+  const fc=(cs.brokerType==="flat"?cs.brokerFlat:0)+(cs.concType==="flat"?cs.concFlat:0)+(cs.hoaFee||0)+(cs.warranty||0)+(cs.repairs||0)+(cs.otherCosts||0);
+  const d=1-(pp/100);if(d<=0)return 0;return(targetNet+fc)/d;
+}
+
+function MoneyInput({value,onChange,label,sublabel,accent,large}){
+  const[focused,setFocused]=useState(false);const[raw,setRaw]=useState(fmt(value));
+  const onFocus=()=>{setFocused(true);setRaw(value===0?"":String(value))};
+  const onBlur=()=>{setFocused(false);const p=parse$(raw);onChange(p);setRaw(fmt(p))};
+  if(!focused&&fmt(value)!==raw)setTimeout(()=>setRaw(fmt(value)),0);
+  return(<div style={{marginBottom:10}}>
+    {label&&<label style={{display:"block",fontSize:10,fontFamily:sans,color:C.textDim,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3,fontWeight:600}}>{label}{sublabel&&<span style={{color:C.textMuted,fontStyle:"italic",textTransform:"none",marginLeft:6,letterSpacing:0}}>{sublabel}</span>}</label>}
+    <input type="text" value={focused?raw:fmt(value)} onFocus={onFocus} onBlur={onBlur} onChange={e=>setRaw(e.target.value)}
+      style={{width:"100%",padding:large?"12px 14px":"8px 10px",fontSize:large?20:15,fontFamily:mono,fontWeight:700,color:accent||C.text,background:C.surface,border:"1px solid "+(focused?(accent||C.blue):C.border),borderRadius:6,outline:"none",transition:"border-color 0.15s",boxSizing:"border-box"}}/>
+  </div>);
+}
+
+function PctInput({value,onChange,label,sublabel}){
+  return(<div style={{marginBottom:10}}>
+    <label style={{display:"block",fontSize:10,fontFamily:sans,color:C.textDim,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3,fontWeight:600}}>{label}{sublabel&&<span style={{color:C.textMuted,fontStyle:"italic",textTransform:"none",marginLeft:6,letterSpacing:0}}>{sublabel}</span>}</label>
+    <div style={{position:"relative"}}>
+      <input type="number" step="0.25" min="0" max="100" value={value} onChange={e=>onChange(parseFloat(e.target.value)||0)}
+        style={{width:"100%",padding:"8px 32px 8px 10px",fontSize:15,fontFamily:mono,fontWeight:700,color:C.text,background:C.surface,border:"1px solid "+C.border,borderRadius:6,outline:"none",boxSizing:"border-box"}}/>
+      <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontFamily:mono,fontSize:12,fontWeight:700,pointerEvents:"none"}}>%</span>
+    </div>
+  </div>);
+}
+
+function TypeToggle({type,onType,pctVal,onPct,flatVal,onFlat,label}){
+  return(<div style={{marginBottom:10}}>
+    <label style={{display:"block",fontSize:10,fontFamily:sans,color:C.textDim,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3,fontWeight:600}}>{label}</label>
+    <div style={{display:"flex",gap:6}}>
+      <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid "+C.border,flexShrink:0}}>
+        {["percent","flat"].map(t=>(<button key={t} onClick={()=>onType(t)} style={{padding:"6px 12px",fontSize:11,fontFamily:sans,fontWeight:700,color:type===t?"#fff":C.textMuted,background:type===t?C.blue+"33":"transparent",border:"none",cursor:"pointer",transition:"all 0.15s"}}>{t==="percent"?"%":"$"}</button>))}
+      </div>
+      <div style={{position:"relative",flex:1}}>
+        <input type="number" step={type==="percent"?"0.25":"100"} min="0" value={type==="percent"?pctVal:flatVal}
+          onChange={e=>{const v=parseFloat(e.target.value)||0;type==="percent"?onPct(v):onFlat(v)}}
+          style={{width:"100%",padding:"8px 32px 8px 10px",fontSize:15,fontFamily:mono,fontWeight:700,color:C.text,background:C.surface,border:"1px solid "+C.border,borderRadius:6,outline:"none",boxSizing:"border-box"}}/>
+        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontFamily:mono,fontSize:12,fontWeight:700,pointerEvents:"none"}}>{type==="percent"?"%":"flat"}</span>
+      </div>
+    </div>
+  </div>);
+}
+
+function OfferInputs({offer,onChange,accent,listPrice,compact}){
+  const[showExtras,setShowExtras]=useState(false);
+  const up=(k,v)=>onChange({...offer,[k]:v});
+  return(<div>
+    <MoneyInput label="Offer Price" value={offer.offerPrice} accent={accent} onChange={v=>up("offerPrice",v)} sublabel={offer.offerPrice&&listPrice?pct(offer.offerPrice,listPrice)+" of list":""}/>
+    <TypeToggle label="Buyer Broker Comp" type={offer.brokerType} onType={v=>up("brokerType",v)} pctVal={offer.brokerPct} onPct={v=>up("brokerPct",v)} flatVal={offer.brokerFlat} onFlat={v=>up("brokerFlat",v)}/>
+    <TypeToggle label="Seller Concessions" type={offer.concType} onType={v=>up("concType",v)} pctVal={offer.concPct} onPct={v=>up("concPct",v)} flatVal={offer.concFlat} onFlat={v=>up("concFlat",v)}/>
+    {!compact&&<>
+      <PctInput label="Listing Commission" value={offer.listCommPct} onChange={v=>up("listCommPct",v)}/>
+      <PctInput label="Title / Escrow / Transfer" value={offer.titlePct} onChange={v=>up("titlePct",v)} sublabel="~1%"/>
+      <button onClick={()=>setShowExtras(!showExtras)} style={{display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:C.textMuted,fontSize:11,cursor:"pointer",padding:"6px 0",fontFamily:sans,fontWeight:600}}>
+        <span style={{transform:showExtras?"rotate(90deg)":"none",transition:"transform 0.15s",display:"inline-block",fontSize:9}}>▶</span> Additional Costs
+      </button>
+      {showExtras&&<div style={{paddingLeft:10,borderLeft:"2px solid "+C.border,marginTop:4}}>
+        <MoneyInput label="HOA Transfer Fee" value={offer.hoaFee} onChange={v=>up("hoaFee",v)}/>
+        <MoneyInput label="Home Warranty" value={offer.warranty} onChange={v=>up("warranty",v)}/>
+        <MoneyInput label="Repair Credits" value={offer.repairs} onChange={v=>up("repairs",v)}/>
+        <MoneyInput label="Other Seller-Paid Costs" value={offer.otherCosts} onChange={v=>up("otherCosts",v)}/>
+      </div>}
+    </>}
+  </div>);
+}
+
+function NetCard({calc,label,accent,mortgage,showMortgage}){
+  const rows=[{l:"Purchase Price",v:calc.price,head:true},{l:"Buyer Broker Comp",v:-calc.broker},{l:"Seller Concessions",v:-calc.conc},{l:"Listing Commission",v:-calc.listComm},{l:"Title / Escrow",v:-calc.title}];
+  if(calc.extras>0)rows.push({l:"Additional Costs",v:-calc.extras});
+  return(<div style={{background:C.surface,borderRadius:10,border:"1px solid "+accent+"20",overflow:"hidden"}}>
+    <div style={{padding:"11px 16px",background:accent+"0d",borderBottom:"1px solid "+accent+"18",display:"flex",alignItems:"center",gap:8}}>
+      <div style={{width:7,height:7,borderRadius:"50%",background:accent}}/><span style={{fontSize:11,fontFamily:sans,fontWeight:700,color:accent,letterSpacing:"0.06em",textTransform:"uppercase"}}>{label}</span>
+    </div>
+    <div style={{padding:"12px 16px"}}>
+      {rows.map((r,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:r.head?"1px solid "+C.border:"none"}}>
+        <span style={{fontSize:12,color:r.head?C.text:C.textDim,fontFamily:sans,fontWeight:r.head?600:400}}>{r.l}</span>
+        <span style={{fontSize:13,fontFamily:mono,fontWeight:600,color:r.head?C.text:r.v<0?C.red:C.text}}>{r.v<0?"("+fmt(Math.abs(r.v))+")":fmt(r.v)}</span>
+      </div>))}
+      <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 2px",marginTop:6,borderTop:"2px solid "+accent+"40"}}>
+        <span style={{fontSize:13,fontFamily:sans,fontWeight:700}}>Seller Net</span>
+        <span style={{fontSize:24,fontFamily:mono,fontWeight:700,color:accent}}>{fmt(calc.net)}</span>
+      </div>
+      {showMortgage&&mortgage>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 2px",borderTop:"1px dashed "+C.border,marginTop:2}}>
+        <span style={{fontSize:11,color:C.textDim}}>After Mortgage Payoff</span>
+        <span style={{fontSize:17,fontFamily:mono,fontWeight:700,color:calc.afterMortgage>=0?C.green:C.red}}>{fmt(calc.afterMortgage)}</span>
+      </div>}
+    </div>
+  </div>);
+}
+
+function genSummary(cA,cB,lp,mode,oA,oB){
+  const bd=(o,c)=>o.brokerType==="percent"?o.brokerPct+"% ("+fmt(c.broker)+")":fmt(o.brokerFlat)+" flat";
+  const cd=(o,c)=>o.concType==="percent"?o.concPct+"% ("+fmt(c.conc)+")":fmt(o.concFlat)+" flat";
+  let t="OFFER ANALYSIS — "+new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})+"\n";
+  t+="List Price: "+fmt(lp)+"\n\n";
+  const add=(l,o,c)=>{t+=l+"\n";t+="  Offer Price: "+fmt(c.price)+" ("+pct(c.price,lp)+" of list)\n";t+="  Buyer Broker Comp: "+bd(o,c)+"\n";t+="  Seller Concessions: "+cd(o,c)+"\n";t+="  Listing Commission: "+o.listCommPct+"% ("+fmt(c.listComm)+")\n";t+="  Title/Escrow: "+o.titlePct+"% ("+fmt(c.title)+")\n";if(c.extras>0)t+="  Additional Costs: "+fmt(c.extras)+"\n";t+="  Total Seller Costs: "+fmt(c.totalCosts)+"\n";t+="  ► Seller Net Proceeds: "+fmt(c.net)+"\n\n"};
+  if(mode==="compare"){add(oA.label||"OFFER A",oA,cA);add(oB.label||"OFFER B",oB,cB);const d=cA.net-cB.net;if(d!==0)t+="BOTTOM LINE: "+(d>0?(oA.label||"Offer A"):(oB.label||"Offer B"))+" nets the seller "+fmt(Math.abs(d))+" more.\n";else t+="BOTTOM LINE: Both offers net the same.\n"}
+  else{add("THIS OFFER",oA,cA)}
+  t+="\nNote: Estimates only. Actual costs vary by title company and transaction specifics.";return t;
+}
+
+function CopyButton({text}){
+  const[copied,setCopied]=useState(false);
+  const go=()=>{navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)})};
+  return(<button onClick={go} style={{padding:"10px 20px",fontSize:12,fontFamily:sans,fontWeight:700,color:copied?C.green:C.blue,background:copied?C.green+"15":C.blue+"12",border:"1px solid "+(copied?C.green:C.blue)+"30",borderRadius:8,cursor:"pointer",transition:"all 0.2s",letterSpacing:"0.03em"}}>{copied?"✓ Copied":"Copy Summary for Seller"}</button>);
+}
+
+function SectionLabel({children}){return<h3 style={{fontSize:10,fontFamily:sans,fontWeight:700,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",margin:"20px 0 10px"}}>{children}</h3>}
+
+const defaultScenarios=[
+  {label:"Full price, no comp/conc",priceMult:1,compPct:0,concPct:0},
+  {label:"Full price, 3% comp",priceMult:1,compPct:3,concPct:0},
+  {label:"Full price, 3% comp + 3% conc",priceMult:1,compPct:3,concPct:3},
+  {label:"97% of list, 3% comp",priceMult:0.97,compPct:3,concPct:0},
+  {label:"95% of list, 3% + 3%",priceMult:0.95,compPct:3,concPct:3},
+];
+
+function ScenariosTable({listPrice,baseOffer,mortgage,showMortgage}){
+  const[scenarios,setScenarios]=useState(defaultScenarios);
+  const[editing,setEditing]=useState(null);
+  const baseCalc=calcNet(baseOffer,listPrice,mortgage);
+  const addS=()=>{setScenarios([...scenarios,{label:"Custom",priceMult:1,compPct:3,concPct:0}]);setEditing(scenarios.length)};
+  const upS=(i,k,v)=>{const s=[...scenarios];s[i]={...s[i],[k]:v};setScenarios(s)};
+  const rmS=(i)=>{setScenarios(scenarios.filter((_,idx)=>idx!==i));setEditing(null)};
+  return(<div style={{background:C.surface,borderRadius:10,border:"1px solid "+C.border,overflow:"hidden"}}>
+    <div style={{padding:"11px 16px",background:C.surfaceAlt,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <span style={{fontSize:11,fontFamily:sans,fontWeight:700,color:C.cyan,letterSpacing:"0.06em",textTransform:"uppercase"}}>Scenarios at {fmt(listPrice)} List</span>
+      <button onClick={addS} style={{fontSize:11,fontFamily:sans,fontWeight:700,color:C.blue,background:C.blue+"15",border:"1px solid "+C.blue+"30",borderRadius:5,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
+    </div>
+    <div style={{overflowX:"auto"}}><div style={{minWidth:560}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 70px 90px 90px 36px",padding:"6px 16px",borderBottom:"1px solid "+C.border}}>
+        {["Scenario","% List","Comp%","Conc%","Offer","Net",""].map(h=>(<span key={h} style={{fontSize:9,color:C.textMuted,fontFamily:sans,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",textAlign:h==="Scenario"||h===""?"left":"right"}}>{h}</span>))}
+      </div>
+      {scenarios.map((s,i)=>{
+        const sO={...baseOffer,offerPrice:listPrice*s.priceMult,brokerType:"percent",brokerPct:s.compPct,concType:"percent",concPct:s.concPct};
+        const c=calcNet(sO,listPrice,mortgage);const diff=c.net-baseCalc.net;const isE=editing===i;
+        return(<div key={i} onClick={()=>!isE&&setEditing(i)} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 70px 90px 90px 36px",padding:"8px 16px",background:i%2?C.surfaceAlt:"transparent",alignItems:"center",cursor:"pointer",borderLeft:isE?"2px solid "+C.blue:"2px solid transparent",transition:"all 0.1s"}}>
+          {isE?<input type="text" value={s.label} onChange={e=>upS(i,"label",e.target.value)} style={{fontSize:12,fontFamily:sans,color:C.text,background:"transparent",border:"1px solid "+C.blue+"40",borderRadius:3,padding:"2px 6px",outline:"none",width:"90%"}}/>:<span style={{fontSize:12,color:C.text,fontFamily:sans}}>{s.label}</span>}
+          {isE?<input type="number" step="1" value={Math.round(s.priceMult*100)} onChange={e=>upS(i,"priceMult",(parseFloat(e.target.value)||100)/100)} style={{width:50,fontSize:12,fontFamily:mono,fontWeight:600,color:C.text,background:"transparent",border:"1px solid "+C.blue+"40",borderRadius:3,padding:"2px 4px",textAlign:"right",outline:"none"}}/>:<span style={{fontSize:12,fontFamily:mono,fontWeight:600,color:C.textDim,textAlign:"right"}}>{Math.round(s.priceMult*100)}%</span>}
+          {isE?<input type="number" step="0.5" value={s.compPct} onChange={e=>upS(i,"compPct",parseFloat(e.target.value)||0)} style={{width:50,fontSize:12,fontFamily:mono,fontWeight:600,color:C.text,background:"transparent",border:"1px solid "+C.blue+"40",borderRadius:3,padding:"2px 4px",textAlign:"right",outline:"none"}}/>:<span style={{fontSize:12,fontFamily:mono,fontWeight:600,color:C.textDim,textAlign:"right"}}>{s.compPct}%</span>}
+          {isE?<input type="number" step="0.5" value={s.concPct} onChange={e=>upS(i,"concPct",parseFloat(e.target.value)||0)} style={{width:50,fontSize:12,fontFamily:mono,fontWeight:600,color:C.text,background:"transparent",border:"1px solid "+C.blue+"40",borderRadius:3,padding:"2px 4px",textAlign:"right",outline:"none"}}/>:<span style={{fontSize:12,fontFamily:mono,fontWeight:600,color:C.textDim,textAlign:"right"}}>{s.concPct}%</span>}
+          <span style={{fontSize:13,fontFamily:mono,fontWeight:600,color:C.text,textAlign:"right"}}>{fmt(c.price)}</span>
+          <span style={{fontSize:13,fontFamily:mono,fontWeight:700,textAlign:"right",color:diff>0?C.green:diff<0?C.red:C.text}}>{fmt(c.net)}</span>
+          {isE?<button onClick={e=>{e.stopPropagation();rmS(i)}} style={{fontSize:13,color:C.red,background:"none",border:"none",cursor:"pointer",padding:"2px 4px"}}>✕</button>:<span/>}
+        </div>);
+      })}
+    </div></div>
+    {editing!==null&&<div style={{padding:"8px 16px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end"}}>
+      <button onClick={()=>setEditing(null)} style={{fontSize:11,fontFamily:sans,fontWeight:600,color:C.blue,background:"transparent",border:"none",cursor:"pointer",padding:"4px 12px"}}>Done Editing</button>
+    </div>}
+  </div>);
+}
+
+function Tab({active,label,onClick,icon}){
+  return(<button onClick={onClick} style={{padding:"10px 18px",fontSize:12,fontFamily:sans,fontWeight:700,color:active?"#fff":C.textMuted,background:active?C.blue+"20":"transparent",border:"none",borderBottom:active?"2px solid "+C.blue:"2px solid transparent",cursor:"pointer",transition:"all 0.15s",letterSpacing:"0.02em",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>{icon}</span> {label}</button>);
+}
+
+function MatchNetTab({listPrice,mortgage,showMortgage}){
+  const[targetNet,setTargetNet]=useState(0);
+  const[structure,setStructure]=useState(mkOffer("Expected Buyer Structure"));
+  const rp=useMemo(()=>{if(targetNet<=0)return 0;const adj=showMortgage&&mortgage>0?targetNet+mortgage:targetNet;return reverseCalcPrice(adj,structure)},[targetNet,structure,mortgage,showMortgage]);
+  const proofO=useMemo(()=>({...structure,offerPrice:rp}),[structure,rp]);
+  const proofC=useMemo(()=>calcNet(proofO,listPrice,mortgage),[proofO,listPrice,mortgage]);
+  return(<div>
+    <div style={{padding:"16px 20px",background:C.blue+"08",borderRadius:10,border:"1px solid "+C.blue+"18",marginBottom:20}}>
+      <p style={{margin:0,fontSize:13,color:C.textDim,fontFamily:sans,lineHeight:1.5}}>Enter the seller's target net and the expected buyer cost structure — this calculates the minimum offer price needed to hit that net.</p>
+    </div>
+    <div style={{display:"flex",gap:28,flexWrap:"wrap"}}>
+      <div style={{flex:"1 1 260px",minWidth:240}}>
+        <SectionLabel>{showMortgage?"Target Walk-Away (After Mortgage)":"Target Seller Net"}</SectionLabel>
+        <MoneyInput value={targetNet} onChange={setTargetNet} accent={C.green} large/>
+        <SectionLabel>Expected Buyer Cost Structure</SectionLabel>
+        <TypeToggle label="Buyer Broker Comp" type={structure.brokerType} onType={v=>setStructure({...structure,brokerType:v})} pctVal={structure.brokerPct} onPct={v=>setStructure({...structure,brokerPct:v})} flatVal={structure.brokerFlat} onFlat={v=>setStructure({...structure,brokerFlat:v})}/>
+        <TypeToggle label="Seller Concessions" type={structure.concType} onType={v=>setStructure({...structure,concType:v})} pctVal={structure.concPct} onPct={v=>setStructure({...structure,concPct:v})} flatVal={structure.concFlat} onFlat={v=>setStructure({...structure,concFlat:v})}/>
+        <PctInput label="Listing Commission" value={structure.listCommPct} onChange={v=>setStructure({...structure,listCommPct:v})}/>
+        <PctInput label="Title / Escrow" value={structure.titlePct} onChange={v=>setStructure({...structure,titlePct:v})} sublabel="~1%"/>
+      </div>
+      <div style={{flex:"1 1 300px",minWidth:280}}>
+        <SectionLabel>Required Offer Price</SectionLabel>
+        <div style={{background:C.surface,borderRadius:10,border:"1px solid "+C.green+"30",padding:"24px 20px",textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:11,color:C.textDim,fontFamily:sans,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Buyer must offer at minimum</div>
+          <div style={{fontSize:38,fontFamily:mono,fontWeight:700,color:C.green,letterSpacing:"-0.02em"}}>{rp>0?fmt(Math.ceil(rp/100)*100):"—"}</div>
+          {rp>0&&listPrice>0&&<div style={{fontSize:12,color:C.textDim,fontFamily:mono,marginTop:6}}>{pct(rp,listPrice)} of list price ({fmt(listPrice)})</div>}
+        </div>
+        {rp>0&&<NetCard calc={proofC} label="Proof — Net at This Price" accent={C.green} mortgage={mortgage} showMortgage={showMortgage}/>}
+      </div>
+    </div>
+  </div>);
+}
+
+function CounterTab({listPrice,mortgage,showMortgage}){
+  const[minNet,setMinNet]=useState(0);
+  const[incoming,setIncoming]=useState(mkOffer("Incoming Offer"));
+  const[counter,setCounter]=useState(mkOffer("Counter"));
+  const iC=useMemo(()=>calcNet(incoming,listPrice,mortgage),[incoming,listPrice,mortgage]);
+  const cC=useMemo(()=>calcNet(counter,listPrice,mortgage),[counter,listPrice,mortgage]);
+  const effMin=showMortgage&&mortgage>0?minNet+mortgage:minNet;
+  const meets=cC.net>=effMin&&counter.offerPrice>0;const surplus=cC.net-effMin;
+  return(<div>
+    <div style={{padding:"16px 20px",background:C.orange+"08",borderRadius:10,border:"1px solid "+C.orange+"18",marginBottom:20}}>
+      <p style={{margin:0,fontSize:13,color:C.textDim,fontFamily:sans,lineHeight:1.5}}>Set the seller's minimum acceptable net, enter the incoming offer, then build a counter. The tool shows in real time whether the counter meets the seller's minimum.</p>
+    </div>
+    <SectionLabel>{showMortgage?"Seller's Minimum Walk-Away":"Seller's Minimum Acceptable Net"}</SectionLabel>
+    <div style={{maxWidth:300,marginBottom:20}}><MoneyInput value={minNet} onChange={setMinNet} accent={C.orange} large/></div>
+    <div style={{display:"flex",gap:28,flexWrap:"wrap",marginBottom:20}}>
+      <div style={{flex:"1 1 260px",minWidth:240}}>
+        <SectionLabel><span style={{color:C.textDim}}>●</span> Incoming Offer</SectionLabel>
+        <OfferInputs offer={incoming} onChange={setIncoming} accent={C.textDim} listPrice={listPrice}/>
+        <div style={{marginTop:12}}><NetCard calc={iC} label="Incoming Net" accent={C.textDim} mortgage={mortgage} showMortgage={showMortgage}/></div>
+      </div>
+      <div style={{flex:"1 1 260px",minWidth:240}}>
+        <SectionLabel><span style={{color:C.orange}}>●</span> Your Counter</SectionLabel>
+        <OfferInputs offer={counter} onChange={setCounter} accent={C.orange} listPrice={listPrice}/>
+        <div style={{marginTop:12}}><NetCard calc={cC} label="Counter Net" accent={C.orange} mortgage={mortgage} showMortgage={showMortgage}/></div>
+      </div>
+    </div>
+    {(counter.offerPrice>0&&minNet>0)&&<div style={{padding:"18px 24px",borderRadius:10,background:meets?C.green+"0c":C.red+"0c",border:"1px solid "+(meets?C.green:C.red)+"25",display:"flex",justifyContent:"center",alignItems:"center",gap:16,flexWrap:"wrap",marginBottom:16}}>
+      <span style={{fontSize:22,fontFamily:mono,fontWeight:700,color:meets?C.green:C.red}}>{meets?"✓":"✕"}</span>
+      <span style={{fontSize:14,color:C.text,fontFamily:sans,fontWeight:600}}>{meets?"Counter meets minimum by "+fmt(surplus):"Counter is "+fmt(Math.abs(surplus))+" below minimum"}</span>
+      {iC.price>0&&<span style={{fontSize:12,color:C.textDim,fontFamily:sans}}>Counter is {fmt(cC.net-iC.net)} {cC.net>=iC.net?"above":"below"} incoming net</span>}
+    </div>}
+    {counter.offerPrice>0&&<div style={{display:"flex",justifyContent:"flex-end"}}><CopyButton text={genSummary(iC,cC,listPrice,"compare",{...incoming,label:"INCOMING OFFER"},{...counter,label:"PROPOSED COUNTER"})}/></div>}
+  </div>);
+}
+
+function App(){
+  const[tab,setTab]=useState("analyze");
+  const[listPrice,setListPrice]=useState(0);const[mortgage,setMortgage]=useState(0);const[showMortgage,setShowMortgage]=useState(false);
+  const[offerA,setOfferA]=useState(mkOffer("Offer A"));const[offerB,setOfferB]=useState(mkOffer("Offer B"));
+  const calcA=useMemo(()=>calcNet(offerA,listPrice,mortgage),[offerA,listPrice,mortgage]);
+  const calcB=useMemo(()=>calcNet(offerB,listPrice,mortgage),[offerB,listPrice,mortgage]);
+  const netDiff=calcA.net-calcB.net;
+  const reset=()=>{setOfferA(mkOffer("Offer A"));setOfferB(mkOffer("Offer B"));setListPrice(0);setMortgage(0)};
+  return(<div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:sans}}>
+    <div style={{padding:"20px 24px 0",borderBottom:"1px solid "+C.border}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <h1 style={{margin:0,fontSize:19,fontWeight:700,letterSpacing:"-0.02em"}}>Negotiation Calculator</h1>
+          <span style={{fontSize:9,padding:"2px 7px",borderRadius:3,background:C.blue+"18",color:C.blue,fontWeight:700,letterSpacing:"0.06em"}}>DMT</span>
+        </div>
+        <button onClick={reset} style={{fontSize:11,fontWeight:600,color:C.textMuted,background:"transparent",border:"1px solid "+C.border,borderRadius:6,padding:"6px 14px",cursor:"pointer",fontFamily:sans}}>Reset All</button>
+      </div>
+      <div style={{display:"flex",gap:0,overflowX:"auto"}}>
+        <Tab active={tab==="analyze"} onClick={()=>setTab("analyze")} label="Analyze" icon="◎"/>
+        <Tab active={tab==="compare"} onClick={()=>setTab("compare")} label="Compare" icon="⇄"/>
+        <Tab active={tab==="matchnet"} onClick={()=>setTab("matchnet")} label="Match Net" icon="◉"/>
+        <Tab active={tab==="counter"} onClick={()=>setTab("counter")} label="Counter" icon="↩"/>
+      </div>
+    </div>
+    <div style={{padding:"20px 24px",maxWidth:1100,margin:"0 auto"}}>
+      <div style={{display:"flex",gap:16,marginBottom:20,flexWrap:"wrap",alignItems:"flex-end"}}>
+        <div style={{flex:"1 1 200px",minWidth:170}}><MoneyInput label="List Price" value={listPrice} accent={C.blue} onChange={setListPrice} large/></div>
+        <div style={{flex:"0 0 200px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+            <label style={{fontSize:10,color:C.textDim,letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:600}}>Mortgage Payoff</label>
+            <button onClick={()=>setShowMortgage(!showMortgage)} style={{fontSize:9,padding:"2px 7px",borderRadius:3,fontWeight:700,cursor:"pointer",border:"none",background:showMortgage?C.green+"20":"rgba(255,255,255,0.04)",color:showMortgage?C.green:C.textMuted}}>{showMortgage?"ON":"OFF"}</button>
+          </div>
+          {showMortgage&&<MoneyInput value={mortgage} onChange={setMortgage}/>}
+        </div>
+      </div>
+
+      {tab==="analyze"&&<div>
+        <div style={{display:"flex",gap:28,flexWrap:"wrap",marginBottom:20}}>
+          <div style={{flex:"1 1 260px",minWidth:240}}><SectionLabel>Offer Details</SectionLabel><OfferInputs offer={offerA} onChange={setOfferA} accent={C.blue} listPrice={listPrice}/></div>
+          <div style={{flex:"1 1 300px",minWidth:280}}><SectionLabel>Net Proceeds</SectionLabel><NetCard calc={calcA} label="Seller Net" accent={C.blue} mortgage={mortgage} showMortgage={showMortgage}/>
+            <div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}><CopyButton text={genSummary(calcA,null,listPrice,"single",offerA)}/></div>
+          </div>
+        </div>
+        {listPrice>0&&<ScenariosTable listPrice={listPrice} baseOffer={offerA} mortgage={mortgage} showMortgage={showMortgage}/>}
+      </div>}
+
+      {tab==="compare"&&<div>
+        <div style={{display:"flex",gap:28,flexWrap:"wrap",marginBottom:20}}>
+          <div style={{flex:"1 1 240px",minWidth:230}}><SectionLabel><span style={{color:C.blue}}>●</span> Offer A</SectionLabel><OfferInputs offer={offerA} onChange={setOfferA} accent={C.blue} listPrice={listPrice}/></div>
+          <div style={{flex:"1 1 240px",minWidth:230}}><SectionLabel><span style={{color:C.orange}}>●</span> Offer B</SectionLabel><OfferInputs offer={offerB} onChange={setOfferB} accent={C.orange} listPrice={listPrice}/></div>
+        </div>
+        <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:16}}>
+          <div style={{flex:1,minWidth:260}}><NetCard calc={calcA} label="Offer A" accent={C.blue} mortgage={mortgage} showMortgage={showMortgage}/></div>
+          <div style={{flex:1,minWidth:260}}><NetCard calc={calcB} label="Offer B" accent={C.orange} mortgage={mortgage} showMortgage={showMortgage}/></div>
+        </div>
+        {(calcA.price>0||calcB.price>0)&&<div style={{padding:"18px 24px",borderRadius:10,marginBottom:16,background:netDiff>0?C.blue+"0a":netDiff<0?C.orange+"0a":C.surface,border:"1px solid "+(netDiff>0?C.blue:netDiff<0?C.orange:C.border)+"25",display:"flex",justifyContent:"center",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:14,color:C.textDim}}>{netDiff>0?"Offer A nets seller":netDiff<0?"Offer B nets seller":"Both net the same"}</span>
+          {netDiff!==0&&<span style={{fontSize:30,fontFamily:mono,fontWeight:700,color:netDiff>0?C.blue:C.orange}}>{fmt(Math.abs(netDiff))}</span>}
+          {netDiff!==0&&<span style={{fontSize:14,color:C.textDim}}>more</span>}
+        </div>}
+        <div style={{display:"flex",justifyContent:"flex-end"}}><CopyButton text={genSummary(calcA,calcB,listPrice,"compare",offerA,offerB)}/></div>
+      </div>}
+
+      {tab==="matchnet"&&<MatchNetTab listPrice={listPrice} mortgage={mortgage} showMortgage={showMortgage}/>}
+      {tab==="counter"&&<CounterTab listPrice={listPrice} mortgage={mortgage} showMortgage={showMortgage}/>}
+
+      <div style={{marginTop:28,padding:"12px 16px",background:C.surface,borderRadius:6,borderLeft:"3px solid "+C.border}}>
+        <p style={{margin:0,fontSize:10,color:C.textMuted,lineHeight:1.6,fontStyle:"italic"}}>Estimates only. Actual closing costs vary by title company, lender requirements, and transaction specifics. Does not include prorated property taxes or HOA dues.</p>
+      </div>
+    </div>
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
